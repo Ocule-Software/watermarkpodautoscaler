@@ -6,6 +6,12 @@
 
 The Watermark Pod Autoscaler (WPA) Controller is a custom controller that extends the Horizontal Pod Autoscaler (HPA).
 
+### How does this differ from the DD/WPA?
+
+- Support for direct gRPC server communication without Kubernetes API use
+  - Allows for higher metric resolution and faster scaling
+- Support for StatsD metric aggregation
+
 ### The features
 
 - Set high and low bounds to prevent autoscaling events.
