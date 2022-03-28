@@ -16,6 +16,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			MetricNamePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
@@ -30,6 +31,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -44,6 +46,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -58,6 +61,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			TransitionPromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
@@ -72,6 +76,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -86,6 +91,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -100,6 +106,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -114,6 +121,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -127,6 +135,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ReasonPromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
@@ -141,6 +150,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -154,6 +164,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -167,6 +178,7 @@ func registerPrometheus() {
 		},
 		[]string{
 			WpaNamePromLabel,
+			WpaNamespacePromLabel,
 			ResourceNamespacePromLabel,
 			ResourceNamePromLabel,
 			ResourceKindPromLabel,
@@ -178,7 +190,7 @@ func registerPrometheus() {
 			Name:      "labels_info",
 			Help:      "Info metric for additional labels to associate to metrics as tags",
 		},
-		append(ExtraPromLabels, WpaNamePromLabel, ResourceNamespacePromLabel),
+		append(ExtraPromLabels, WpaNamePromLabel, WpaNamespacePromLabel, ResourceNamespacePromLabel),
 	)
 
 	sigmetrics.Registry.MustRegister(Value.prom)
@@ -199,6 +211,7 @@ func registerPrometheus() {
 func cleanupAssociatedPrometheusMetrics(wpa *datadoghqv1alpha1.WatermarkPodAutoscaler, onlyMetricsSpecific bool) {
 	promLabelsForWpa := prometheus.Labels{
 		WpaNamePromLabel:           wpa.Name,
+		WpaNamespacePromLabel:      wpa.Namespace,
 		ResourceNamespacePromLabel: wpa.Namespace,
 		ResourceNamePromLabel:      wpa.Spec.ScaleTargetRef.Name,
 		ResourceKindPromLabel:      wpa.Spec.ScaleTargetRef.Kind,
@@ -221,7 +234,7 @@ func cleanupAssociatedPrometheusMetrics(wpa *datadoghqv1alpha1.WatermarkPodAutos
 		TransitionCountdown.prom.Delete(promLabelsForWpa)
 		delete(promLabelsForWpa, TransitionPromLabel)
 
-		promLabelsInfo := prometheus.Labels{WpaNamePromLabel: wpa.Name, ResourceNamespacePromLabel: wpa.Namespace}
+		promLabelsInfo := prometheus.Labels{WpaNamePromLabel: wpa.Name, WpaNamespacePromLabel: wpa.Namespace, ResourceNamespacePromLabel: wpa.Namespace}
 		for _, eLabel := range ExtraPromLabels {
 			eLabelValue := wpa.Labels[eLabel]
 			promLabelsInfo[eLabel] = eLabelValue
