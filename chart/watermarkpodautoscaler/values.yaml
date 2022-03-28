@@ -5,7 +5,7 @@
 replicaCount: 1
 image:
   repository: hugohafner/watermarkpodautoscaler
-  tag: v0.4.3
+  tag: v0.4.4
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 nameOverride: ""
@@ -54,7 +54,6 @@ metrics:
     socketPath: /var/run/datadog/
     socketName: dsd.socket
   namespace: ""
-
 resources: {}
 # We usually recommend not to specify default resources and to leave this as a conscious
 # choice for the user. This also increases chances charts run on environments with little
