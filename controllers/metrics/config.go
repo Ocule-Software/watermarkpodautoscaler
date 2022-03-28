@@ -15,6 +15,9 @@ const (
 	// WpaNamePromLabel is the label name for the WatermarkPodAutoscaler CRD object name
 	WpaNamePromLabel = "wpa_name"
 
+	// WpaNamespacePromLabel is the label name for the WatermarkPodAutoscaler CRD object namaespace
+	WpaNamespacePromLabel = "wpa_namespace"
+
 	// ResourceNamePromLabel is the label name for the WatermarkPodAutoscaler target resource name
 	ResourceNamePromLabel = "resource_name"
 
