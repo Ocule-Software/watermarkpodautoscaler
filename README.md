@@ -8,9 +8,9 @@ The Watermark Pod Autoscaler (WPA) Controller is a custom controller that extend
 
 ### How does this differ from the DD/WPA?
 
-- Support for direct gRPC server communication without Kubernetes API use
+- Support for direct [gRPC server communication](#grpc-server-wpa) without Kubernetes API use
   - Allows for higher metric resolution and faster scaling
-- Support for StatsD metric aggregation
+- Support for StatsD [metric aggregation](https://github.com/hugolhafner/watermarkpodautoscaler/blob/main/docs/metrics.md)
 
 ### The features
 
