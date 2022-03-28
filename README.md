@@ -12,6 +12,7 @@ The Watermark Pod Autoscaler (WPA) Controller is a custom controller that extend
 - Specify scaling velocity.
 - Specify windows of time to restrict upscale or downscale events.
 - Different algorithms to compute the desired number of replicas.
+- Scale pods based on external gRPC server metrics for higher resolution
 
 ### The goal
 
@@ -28,6 +29,7 @@ If you want to autoscale some of your applications, but:
 - The single threshold logic of the HPA is not enough.
 - You need to specify forbidden windows specific to your application.
 - You want to limit the scaling velocity.
+- You want to increase metrics resolution.
 
 The WPA is intended to offset the limitations of the HPA.
 
@@ -102,6 +104,8 @@ The Datadog Cluster Agent will pick up the creation/update/deletion event. It pa
 
 In this example, we are using the following spec configuration:
 
+### Metrics Server WPA
+
 ```yaml
 apiVersion: datadoghq.com/v1alpha1
 kind: WatermarkPodAutoscaler
@@ -128,6 +132,34 @@ spec:
           kubernetes_cluster: mycluster
           service: billing
           short_image: billing-app
+    type: External
+  tolerance: "0.01"
+```
+
+### gRPC Server WPA
+
+```yaml
+apiVersion: datadoghq.com/v1alpha1
+kind: WatermarkPodAutoscaler
+metadata:
+  name: example-watermarkpodautoscaler
+spec:
+  downscaleForbiddenWindowSeconds: 60
+  upscaleForbiddenWindowSeconds: 30
+  scaleDownLimitFactor: 30
+  scaleUpLimitFactor: 50
+  minReplicas: 4
+  maxReplicas: 9
+  scaleTargetRef:
+    kind: "Deployment"
+    name: "some_app"
+    apiVersion: "apps/v1"
+  metrics:
+  - external:
+      highWatermark: 400m
+      lowWatermark: 150m
+      metricName: custom.http_requests_per_second.max
+      serverAddress: scaler.custom-scaler.svc.cluster.local:80
     type: External
   tolerance: "0.01"
 ```
@@ -187,6 +219,14 @@ If all the conditions are met, the controller will scale the targeted object in 
 - Does not take CPU into account to normalize the number of replicas.
 - Does not consider the readiness of pods in the targeted deployment.
 - Similar to the HPA, the controller polls the External Metrics Provider every 15 seconds, which refreshes metrics every 30 seconds.
+
+## Todo
+
+- [x] Add gRPC metric server support
+- [ ] Add support for multiple metrics.
+- [ ] Add support for fallback metrics and the ability to specify a fallback scale
+- [ ] Add readiness considerations for pods
+- [ ] Add time to scale metrics (Keep track of time taken for a scaling event to come to fruition, with tags identifying whether the event also required a node scale up or just a pod scale up)
 
 ## Troubleshooting
 
@@ -372,8 +412,8 @@ Then, to install some tooling dependencies, run `make install-tools`.
 * `make test`: Run unit tests.
 * `make validate`: Run common Golang linters (`golangci-lint`).
 * `make e2e`: Run end-to-end tests on the current configured Kubernetes cluster.
-* `make container`: Build the controller Docker image using the operator SDK.
-* `make container-ci`: Build the controller Docker image with the multi-stage Dockerfile.
+* `make docker-build`: Build the controller Docker image using the operator SDK.
+* `make docker-build-ci`: Build the controller Docker image with the multi-stage Dockerfile.
 
 ### Releasing
 

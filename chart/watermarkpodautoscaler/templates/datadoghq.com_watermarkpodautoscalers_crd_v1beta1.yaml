@@ -100,6 +100,11 @@ spec:
                         - type: integer
                         - type: string
                         pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      metadata:
+                        additionalProperties:
+                          type: string
+                        description: serverMetadata is gRPC request metadata sent along with the request
+                        type: object
                       metricName:
                         description: metricName is the name of the metric in question.
                         type: string
@@ -133,6 +138,9 @@ spec:
                             description: matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is "key", the operator is "In", and the values array contains only "value". The requirements are ANDed.
                             type: object
                         type: object
+                      serverAddress:
+                        description: serverAddress is the address of an external gRPC server form which metrics can be fetched
+                        type: string
                     required:
                     - metricName
                     type: object

@@ -13,7 +13,7 @@ LDFLAGS=-w -s -X ${BUILDINFOPKG}.Commit=${GIT_COMMIT} -X ${BUILDINFOPKG}.Version
 CHANNELS=alpha
 DEFAULT_CHANNEL=alpha
 GOARCH?=amd64
-IMG_NAME=gcr.io/datadoghq/watermarkpodautoscaler
+IMG_NAME=hugohafner/watermarkpodautoscaler
 
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)

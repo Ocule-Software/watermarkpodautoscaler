@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/DataDog/watermarkpodautoscaler/api/v1alpha1"
-	"github.com/DataDog/watermarkpodautoscaler/third_party/kubernetes/pkg/controller/podautoscaler/metrics"
+	kubemetrics "github.com/DataDog/watermarkpodautoscaler/third_party/kubernetes/pkg/controller/podautoscaler/metrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -246,9 +246,9 @@ func (tc *replicaCalcTestCase) runTest(t *testing.T) {
 
 	rClient := tc.getFakeResourceClient()
 
-	mClient := metrics.NewRESTMetricsClient(rClient.MetricsV1beta1(), nil, emClient)
+	mClient := kubemetrics.NewRESTMetricsClient(rClient.MetricsV1beta1(), nil, emClient)
 
-	replicaCalculator := NewReplicaCalculator(mClient, informer.Lister())
+	replicaCalculator := NewReplicaCalculator(mClient, informer.Lister(), NewExternalServerManager().SetFake())
 
 	stop := make(chan struct{})
 	defer close(stop)
@@ -1706,7 +1706,7 @@ func TestGroupPods(t *testing.T) {
 		name                string
 		targetName          string
 		pods                []*corev1.Pod
-		metrics             metrics.PodMetricsInfo
+		metrics             kubemetrics.PodMetricsInfo
 		resource            corev1.ResourceName
 		expectReadyPodCount int
 		expectIgnoredPods   sets.String
@@ -1715,7 +1715,7 @@ func TestGroupPods(t *testing.T) {
 			"void",
 			"",
 			[]*corev1.Pod{},
-			metrics.PodMetricsInfo{},
+			kubemetrics.PodMetricsInfo{},
 			corev1.ResourceCPU,
 			0,
 			sets.NewString(),
@@ -1737,8 +1737,8 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"bentham": metrics.PodMetric{Value: 1, Timestamp: time.Now(), Window: time.Minute},
+			kubemetrics.PodMetricsInfo{
+				"bentham": kubemetrics.PodMetric{Value: 1, Timestamp: time.Now(), Window: time.Minute},
 			},
 			corev1.ResourceMemory,
 			1,
@@ -1764,8 +1764,8 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"lucretius": metrics.PodMetric{Value: 1},
+			kubemetrics.PodMetricsInfo{
+				"lucretius": kubemetrics.PodMetric{Value: 1},
 			},
 			corev1.ResourceCPU,
 			0,
@@ -1798,8 +1798,8 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"bentham": metrics.PodMetric{Value: 1, Timestamp: time.Now(), Window: 30 * time.Second},
+			kubemetrics.PodMetricsInfo{
+				"bentham": kubemetrics.PodMetric{Value: 1, Timestamp: time.Now(), Window: 30 * time.Second},
 			},
 			corev1.ResourceCPU,
 			1,
@@ -1832,8 +1832,8 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"lucretius": metrics.PodMetric{Value: 1},
+			kubemetrics.PodMetricsInfo{
+				"lucretius": kubemetrics.PodMetric{Value: 1},
 			},
 			corev1.ResourceCPU,
 			0,
@@ -1866,8 +1866,8 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"bentham": metrics.PodMetric{Value: 1, Timestamp: time.Now().Add(-2 * time.Minute), Window: time.Minute},
+			kubemetrics.PodMetricsInfo{
+				"bentham": kubemetrics.PodMetric{Value: 1, Timestamp: time.Now().Add(-2 * time.Minute), Window: time.Minute},
 			},
 			corev1.ResourceCPU,
 			1,
@@ -1901,8 +1901,8 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"lucretius": metrics.PodMetric{Value: 1},
+			kubemetrics.PodMetricsInfo{
+				"lucretius": kubemetrics.PodMetric{Value: 1},
 			},
 			corev1.ResourceCPU,
 			1,
@@ -1935,8 +1935,8 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"lucretius": metrics.PodMetric{Value: 1},
+			kubemetrics.PodMetricsInfo{
+				"lucretius": kubemetrics.PodMetric{Value: 1},
 			},
 			corev1.ResourceCPU,
 			0,
@@ -1962,7 +1962,7 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{},
+			kubemetrics.PodMetricsInfo{},
 			corev1.ResourceCPU,
 			0,
 			sets.NewString(),
@@ -2024,9 +2024,9 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"lucretius": metrics.PodMetric{Value: 1},
-				"niccolo":   metrics.PodMetric{Value: 1},
+			kubemetrics.PodMetricsInfo{
+				"lucretius": kubemetrics.PodMetric{Value: 1},
+				"niccolo":   kubemetrics.PodMetric{Value: 1},
 			},
 			corev1.ResourceCPU,
 			1,
@@ -2096,10 +2096,10 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics.PodMetricsInfo{
-				"epicurus":  metrics.PodMetric{Value: 1},
-				"lucretius": metrics.PodMetric{Value: 1},
-				"niccolo":   metrics.PodMetric{Value: 1},
+			kubemetrics.PodMetricsInfo{
+				"epicurus":  kubemetrics.PodMetric{Value: 1},
+				"lucretius": kubemetrics.PodMetric{Value: 1},
+				"niccolo":   kubemetrics.PodMetric{Value: 1},
 			},
 			corev1.ResourceCPU,
 			1,
@@ -2122,7 +2122,7 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics:             metrics.PodMetricsInfo{},
+			metrics:             kubemetrics.PodMetricsInfo{},
 			resource:            corev1.ResourceCPU,
 			expectReadyPodCount: 0,
 			expectIgnoredPods:   sets.NewString("unscheduled"),
@@ -2144,7 +2144,7 @@ func TestGroupPods(t *testing.T) {
 					},
 				},
 			},
-			metrics:             metrics.PodMetricsInfo{},
+			metrics:             kubemetrics.PodMetricsInfo{},
 			resource:            corev1.ResourceCPU,
 			expectReadyPodCount: 0,
 			expectIgnoredPods:   sets.NewString(),
@@ -2196,9 +2196,9 @@ func TestRemoveMetricsForPods(t *testing.T) {
 		},
 	}
 
-	fakePodMetrics := make(metrics.PodMetricsInfo, len(fakeMetrics))
+	fakePodMetrics := make(kubemetrics.PodMetricsInfo, len(fakeMetrics))
 	for _, m := range fakeMetrics {
-		fakePodMetrics[m.podName] = metrics.PodMetric{
+		fakePodMetrics[m.podName] = kubemetrics.PodMetric{
 			Timestamp: m.ts,
 			Window:    m.window,
 			Value:     m.val,
@@ -2358,7 +2358,7 @@ func TestGetReadyPodsCount(t *testing.T) {
 			informerFactory := informers.NewSharedInformerFactory(fakeClient, 0)
 			informer := informerFactory.Core().V1().Pods()
 
-			replicaCalculator := NewReplicaCalculator(nil, informer.Lister())
+			replicaCalculator := NewReplicaCalculator(nil, informer.Lister(), NewExternalServerManager().SetFake())
 
 			stop := make(chan struct{})
 			defer close(stop)

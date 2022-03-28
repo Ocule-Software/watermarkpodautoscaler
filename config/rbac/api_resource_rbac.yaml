@@ -24,4 +24,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: watermarkpodautoscaler-controller-manager
-    namespace: datadog
+    namespace: wpa

@@ -9,6 +9,7 @@ import (
 	"context"
 
 	datadoghqv1alpha1 "github.com/DataDog/watermarkpodautoscaler/api/v1alpha1"
+	"github.com/DataDog/watermarkpodautoscaler/controllers/metrics"
 	"github.com/DataDog/watermarkpodautoscaler/pkg/util"
 	logr "github.com/go-logr/logr"
 )
@@ -50,7 +51,7 @@ func (r *WatermarkPodAutoscalerReconciler) handleFinalizer(reqLogger logr.Logger
 }
 
 func (r *WatermarkPodAutoscalerReconciler) finalizeWPA(reqLogger logr.Logger, wpa *datadoghqv1alpha1.WatermarkPodAutoscaler) {
-	cleanupAssociatedMetrics(wpa, false)
+	metrics.CleanupAssociatedMetrics(wpa, false)
 	reqLogger.Info("Successfully finalized WatermarkPodAutoscaler")
 }
 

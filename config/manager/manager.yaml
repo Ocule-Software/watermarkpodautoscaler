@@ -1,15 +1,7 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    control-plane: watermarkpodautoscaler-controller-manager
-  name: datadog
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: controller-manager
-  namespace: datadog
   labels:
     control-plane: watermarkpodautoscaler-controller-manager
 spec:
@@ -33,7 +25,7 @@ spec:
       - name: watermarkpodautoscaler
         args:
         - --enable-leader-election
-        image: gcr.io/datadoghq/watermarkpodautoscaler:latest
+        image: hugohafner/watermarkpodautoscaler:v0.4.3
         imagePullPolicy: IfNotPresent
         resources:
           limits:

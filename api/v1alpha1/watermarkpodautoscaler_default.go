@@ -124,13 +124,13 @@ func checkWPAMetricsValidity(wpa *WatermarkPodAutoscaler) (err error) {
 				msg := fmt.Sprintf("Watermarks are not set correctly, removing the WPA %s/%s from the Reconciler", wpa.Namespace, wpa.Name)
 				return fmt.Errorf(msg)
 			}
-			if metric.External.MetricSelector == nil {
-				msg := fmt.Sprintf("Missing Labels for the External metric %s", metric.External.MetricName)
+			if metric.External.MetricSelector == nil && metric.External.ServerAddress == "" {
+				msg := fmt.Sprintf("Missing oneof MetricSelector or ServerAddress for the External Metric %s", metric.External.MetricName)
 				return fmt.Errorf(msg)
 			}
 			if metric.External.LowWatermark != nil && metric.External.HighWatermark != nil {
 				if metric.External.HighWatermark.MilliValue() < metric.External.LowWatermark.MilliValue() {
-					msg := fmt.Sprintf("Low WaterMark of External metric %s{%s} has to be strictly inferior to the High Watermark", metric.External.MetricName, metric.External.MetricSelector.MatchLabels)
+					msg := fmt.Sprintf("Low WaterMark of External metric %s has to be strictly inferior to the High Watermark", metric.External.MetricName)
 					return fmt.Errorf(msg)
 				}
 			}
@@ -148,7 +148,7 @@ func checkWPAMetricsValidity(wpa *WatermarkPodAutoscaler) (err error) {
 			}
 			if metric.Resource.LowWatermark != nil && metric.Resource.HighWatermark != nil {
 				if metric.Resource.HighWatermark.MilliValue() < metric.Resource.LowWatermark.MilliValue() {
-					msg := fmt.Sprintf("Low WaterMark of Resource metric %s{%s} has to be strictly inferior to the High Watermark", metric.Resource.Name, metric.Resource.MetricSelector.MatchLabels)
+					msg := fmt.Sprintf("Low WaterMark of Resource metric %s has to be strictly inferior to the High Watermark", metric.Resource.Name)
 					return fmt.Errorf(msg)
 				}
 			}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/DataDog/watermarkpodautoscaler/api/v1alpha1"
+	"github.com/DataDog/watermarkpodautoscaler/controllers/metrics"
 
 	metricsclient "github.com/DataDog/watermarkpodautoscaler/third_party/kubernetes/pkg/controller/podautoscaler/metrics"
 	"github.com/go-logr/logr"
@@ -41,15 +42,17 @@ type ReplicaCalculatorItf interface {
 // ReplicaCalculator is responsible for calculation of the number of replicas
 // It contains all the needed information
 type ReplicaCalculator struct {
-	metricsClient metricsclient.MetricsClient
-	podLister     corelisters.PodLister
+	metricsClient         metricsclient.MetricsClient
+	podLister             corelisters.PodLister
+	externalServerManager *ExternalServerManager
 }
 
 // NewReplicaCalculator returns a ReplicaCalculator object reference
-func NewReplicaCalculator(metricsClient metricsclient.MetricsClient, podLister corelisters.PodLister) *ReplicaCalculator {
+func NewReplicaCalculator(metricsClient metricsclient.MetricsClient, podLister corelisters.PodLister, externalServerManager *ExternalServerManager) *ReplicaCalculator {
 	return &ReplicaCalculator{
-		metricsClient: metricsClient,
-		podLister:     podLister,
+		metricsClient:         metricsClient,
+		podLister:             podLister,
+		externalServerManager: externalServerManager,
 	}
 }
 
@@ -92,33 +95,43 @@ func (c *ReplicaCalculator) GetExternalMetricReplicas(logger logr.Logger, target
 
 	metricName := metric.External.MetricName
 	selector := metric.External.MetricSelector
-	labelSelector, err := metav1.LabelSelectorAsSelector(selector)
-	if err != nil {
-		return ReplicaCalculation{}, err
+	serverAddress := metric.External.ServerAddress
+
+	var metricValues []int64
+	var timestamp time.Time
+	var metricErr error
+	if (selector != nil && serverAddress != "") || (selector != nil && serverAddress == "") {
+		labelSelector, err := metav1.LabelSelectorAsSelector(selector)
+		if err != nil {
+			return ReplicaCalculation{}, err
+		}
+
+		metricValues, timestamp, metricErr = c.metricsClient.GetExternalMetric(metricName, wpa.Namespace, labelSelector)
+	} else if serverAddress != "" {
+		metricValues, timestamp, metricErr = c.externalServerManager.GetExternalMetric(metricName, serverAddress, metric.External.Metadata)
 	}
 
-	metrics, timestamp, err := c.metricsClient.GetExternalMetric(metricName, wpa.Namespace, labelSelector)
-	if err != nil {
+	if metricErr != nil {
 		// When we add official support for several metrics, move this Delete to only occur if no metric is available at all.
 		labelsWithReason := prometheus.Labels{
-			wpaNamePromLabel:           wpa.Name,
-			resourceNamespacePromLabel: wpa.Namespace,
-			resourceNamePromLabel:      wpa.Spec.ScaleTargetRef.Name,
-			resourceKindPromLabel:      wpa.Spec.ScaleTargetRef.Kind,
-			reasonPromLabel:            upscaleCappingPromLabelVal,
+			metrics.WpaNamePromLabel:           wpa.Name,
+			metrics.ResourceNamespacePromLabel: wpa.Namespace,
+			metrics.ResourceNamePromLabel:      wpa.Spec.ScaleTargetRef.Name,
+			metrics.ResourceKindPromLabel:      wpa.Spec.ScaleTargetRef.Kind,
+			metrics.ReasonPromLabel:            metrics.UpscaleCappingPromLabelVal,
 		}
-		restrictedScaling.Delete(labelsWithReason)
-		labelsWithReason[reasonPromLabel] = downscaleCappingPromLabelVal
-		restrictedScaling.Delete(labelsWithReason)
-		labelsWithReason[reasonPromLabel] = withinBoundsPromLabelVal
-		restrictedScaling.Delete(labelsWithReason)
-		value.Delete(prometheus.Labels{wpaNamePromLabel: wpa.Name, metricNamePromLabel: metricName})
-		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("unable to get external metric %s/%s/%+v: %s", wpa.Namespace, metricName, selector, err)
+		metrics.Delete(metrics.RestrictedScaling, labelsWithReason)
+		labelsWithReason[metrics.ReasonPromLabel] = metrics.DownscaleCappingPromLabelVal
+		metrics.Delete(metrics.RestrictedScaling, labelsWithReason)
+		labelsWithReason[metrics.ReasonPromLabel] = metrics.WithinBoundsPromLabelVal
+		metrics.Delete(metrics.RestrictedScaling, labelsWithReason)
+		metrics.Delete(metrics.Value, prometheus.Labels{metrics.WpaNamePromLabel: wpa.Name, metrics.MetricNamePromLabel: metricName})
+		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("unable to get external metric %s/%s/%+v: %s", wpa.Namespace, metricName, selector, metricErr)
 	}
-	logger.Info("Metrics from the External Metrics Provider", "metrics", metrics)
+	logger.Info("Metrics from the External Metrics Provider", "metrics", metricValues)
 
 	var sum int64
-	for _, val := range metrics {
+	for _, val := range metricValues {
 		sum += val
 	}
 
@@ -139,25 +152,25 @@ func (c *ReplicaCalculator) GetResourceReplicas(logger logr.Logger, target *auto
 	}
 
 	namespace := wpa.Namespace
-	metrics, timestamp, err := c.metricsClient.GetResourceMetric(resourceName, namespace, labelSelector, "")
+	metricValues, timestamp, err := c.metricsClient.GetResourceMetric(resourceName, namespace, labelSelector, "")
 	if err != nil {
 		// When we add official support for several metrics, move this Delete to only occur if no metric is available at all.
 		labelsWithReason := prometheus.Labels{
-			wpaNamePromLabel:           wpa.Name,
-			resourceNamespacePromLabel: wpa.Namespace,
-			resourceNamePromLabel:      wpa.Spec.ScaleTargetRef.Name,
-			resourceKindPromLabel:      wpa.Spec.ScaleTargetRef.Kind,
-			reasonPromLabel:            upscaleCappingPromLabelVal,
+			metrics.WpaNamePromLabel:           wpa.Name,
+			metrics.ResourceNamespacePromLabel: wpa.Namespace,
+			metrics.ResourceNamePromLabel:      wpa.Spec.ScaleTargetRef.Name,
+			metrics.ResourceKindPromLabel:      wpa.Spec.ScaleTargetRef.Kind,
+			metrics.ReasonPromLabel:            metrics.UpscaleCappingPromLabelVal,
 		}
-		restrictedScaling.Delete(labelsWithReason)
-		labelsWithReason[reasonPromLabel] = downscaleCappingPromLabelVal
-		restrictedScaling.Delete(labelsWithReason)
-		labelsWithReason[reasonPromLabel] = withinBoundsPromLabelVal
-		restrictedScaling.Delete(labelsWithReason)
-		value.Delete(prometheus.Labels{wpaNamePromLabel: wpa.Name, metricNamePromLabel: string(resourceName)})
+		metrics.Delete(metrics.RestrictedScaling, labelsWithReason)
+		labelsWithReason[metrics.ReasonPromLabel] = metrics.DownscaleCappingPromLabelVal
+		metrics.Delete(metrics.RestrictedScaling, labelsWithReason)
+		labelsWithReason[metrics.ReasonPromLabel] = metrics.WithinBoundsPromLabelVal
+		metrics.Delete(metrics.RestrictedScaling, labelsWithReason)
+		metrics.Delete(metrics.Value, prometheus.Labels{metrics.WpaNamePromLabel: wpa.Name, metrics.MetricNamePromLabel: string(resourceName)})
 		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("unable to get resource metric %s/%s/%+v: %s", wpa.Namespace, resourceName, selector, err)
 	}
-	logger.Info("Metrics from the Resource Client", "metrics", metrics)
+	logger.Info("Metrics from the Resource Client", "metrics", metricValues)
 
 	lbl, err := labels.Parse(target.Status.Selector)
 	if err != nil {
@@ -173,7 +186,7 @@ func (c *ReplicaCalculator) GetResourceReplicas(logger logr.Logger, target *auto
 		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("no pods returned by selector while calculating replica count")
 	}
 	readiness := time.Duration(wpa.Spec.ReadinessDelaySeconds) * time.Second
-	readyPods, ignoredPods := groupPods(logger, podList, target.Name, metrics, resourceName, readiness)
+	readyPods, ignoredPods := groupPods(logger, podList, target.Name, metricValues, resourceName, readiness)
 	readyPodCount := len(readyPods)
 
 	ratioReadyPods := int32(100 * readyPodCount / (len(podList) - len(ignoredPods)))
@@ -182,8 +195,8 @@ func (c *ReplicaCalculator) GetResourceReplicas(logger logr.Logger, target *auto
 		return ReplicaCalculation{}, fmt.Errorf("%d %% of the pods are unready, will not autoscale %s/%s", ratioReadyPods, target.Namespace, target.Name)
 	}
 
-	removeMetricsForPods(metrics, ignoredPods)
-	if len(metrics) == 0 {
+	removeMetricsForPods(metricValues, ignoredPods)
+	if len(metricValues) == 0 {
 		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("did not receive metrics for any ready pods")
 	}
 
@@ -193,7 +206,7 @@ func (c *ReplicaCalculator) GetResourceReplicas(logger logr.Logger, target *auto
 	}
 
 	var sum int64
-	for _, podMetric := range metrics {
+	for _, podMetric := range metricValues {
 		sum += podMetric.Value
 	}
 	adjustedUsage := float64(sum) / averaged
@@ -207,8 +220,8 @@ func getReplicaCount(logger logr.Logger, currentReplicas, currentReadyReplicas i
 	adjustedHM := float64(highMark.MilliValue() + highMark.MilliValue()*wpa.Spec.Tolerance.MilliValue()/1000)
 	adjustedLM := float64(lowMark.MilliValue() - lowMark.MilliValue()*wpa.Spec.Tolerance.MilliValue()/1000)
 
-	labelsWithReason := prometheus.Labels{wpaNamePromLabel: wpa.Name, resourceNamespacePromLabel: wpa.Namespace, resourceNamePromLabel: wpa.Spec.ScaleTargetRef.Name, resourceKindPromLabel: wpa.Spec.ScaleTargetRef.Kind, reasonPromLabel: withinBoundsPromLabelVal}
-	labelsWithMetricName := prometheus.Labels{wpaNamePromLabel: wpa.Name, resourceNamespacePromLabel: wpa.Namespace, resourceNamePromLabel: wpa.Spec.ScaleTargetRef.Name, resourceKindPromLabel: wpa.Spec.ScaleTargetRef.Kind, metricNamePromLabel: name}
+	labelsWithReason := prometheus.Labels{metrics.WpaNamePromLabel: wpa.Name, metrics.ResourceNamespacePromLabel: wpa.Namespace, metrics.ResourceNamePromLabel: wpa.Spec.ScaleTargetRef.Name, metrics.ResourceKindPromLabel: wpa.Spec.ScaleTargetRef.Kind, metrics.ReasonPromLabel: metrics.WithinBoundsPromLabelVal}
+	labelsWithMetricName := prometheus.Labels{metrics.WpaNamePromLabel: wpa.Name, metrics.ResourceNamespacePromLabel: wpa.Namespace, metrics.ResourceNamePromLabel: wpa.Spec.ScaleTargetRef.Name, metrics.ResourceKindPromLabel: wpa.Spec.ScaleTargetRef.Kind, metrics.MetricNamePromLabel: name}
 
 	switch {
 	case adjustedUsage > adjustedHM:
@@ -233,15 +246,15 @@ func getReplicaCount(logger logr.Logger, currentReplicas, currentReadyReplicas i
 		}
 		logger.Info("Value is below lowMark", "usage", utilizationQuantity.String(), "replicaCount", replicaCount, "currentReadyReplicas", currentReadyReplicas, "tolerance (%)", float64(wpa.Spec.Tolerance.MilliValue())/10, "adjustedLM", adjustedLM, "adjustedUsage", adjustedUsage)
 	default:
-		restrictedScaling.With(labelsWithReason).Set(1)
-		value.With(labelsWithMetricName).Set(adjustedUsage)
+		metrics.Set(metrics.RestrictedScaling, labelsWithReason, 1)
+		metrics.Set(metrics.Value, labelsWithMetricName, adjustedUsage)
 		logger.Info("Within bounds of the watermarks", "value", utilizationQuantity.String(), "currentReadyReplicas", currentReadyReplicas, "tolerance (%)", float64(wpa.Spec.Tolerance.MilliValue())/10, "adjustedLM", adjustedLM, "adjustedHM", adjustedHM, "adjustedUsage", adjustedUsage)
 		// returning the currentReplicas instead of the count of healthy ones to be consistent with the upstream behavior.
 		return currentReplicas, utilizationQuantity.MilliValue()
 	}
 
-	restrictedScaling.With(labelsWithReason).Set(0)
-	value.With(labelsWithMetricName).Set(adjustedUsage)
+	metrics.Set(metrics.RestrictedScaling, labelsWithReason, 0)
+	metrics.Set(metrics.Value, labelsWithMetricName, adjustedUsage)
 
 	return replicaCount, utilizationQuantity.MilliValue()
 }

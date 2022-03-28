@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package externalscaler;
+option go_package = "github.com/DataDog/watermarkpodautoscaler/externalscaler";
+
+service ExternalScaler {
+    rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse) {}
+}
+
+message GetMetricsRequest {
+    string metricName = 2;
+    map<string, string> metadata = 3;
+}
+
+message GetMetricsResponse {
+    repeated int64 values = 1;
+}

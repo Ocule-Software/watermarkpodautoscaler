@@ -255,7 +255,7 @@ func TestReconcileWatermarkPodAutoscaler_Reconcile(t *testing.T) {
 					return err
 				}
 				cond := &v2beta1.HorizontalPodAutoscalerCondition{
-					Message: "Invalid WPA specification: Low WaterMark of External metric deadbeef{map[label:value]} has to be strictly inferior to the High Watermark",
+					Message: "Invalid WPA specification: Low WaterMark of External metric deadbeef has to be strictly inferior to the High Watermark",
 				}
 				if wpa.Status.Conditions[0].Message != cond.Message {
 					return fmt.Errorf("Unexpected Condition for incorrectly configured WPA")
@@ -640,7 +640,7 @@ func TestReconcileWatermarkPodAutoscaler_computeReplicasForMetrics(t *testing.T)
 			args: args{
 				validMetrics: 1,
 				replicas:     10,
-				MetricName:   "deadbeef{map[label:value]}",
+				MetricName:   "deadbeef",
 				wpa: test.NewWatermarkPodAutoscaler(testingNamespace, testingWPAName, &test.NewWatermarkPodAutoscalerOptions{
 					Labels: map[string]string{"foo-key": "bar-value"},
 					Spec: &v1alpha1.WatermarkPodAutoscalerSpec{
@@ -709,7 +709,7 @@ func TestReconcileWatermarkPodAutoscaler_computeReplicasForMetrics(t *testing.T)
 			args: args{
 				validMetrics: 2,
 				replicas:     10,
-				MetricName:   "deadbeef{map[label:value]}",
+				MetricName:   "deadbeef",
 				wpa: test.NewWatermarkPodAutoscaler(testingNamespace, testingWPAName, &test.NewWatermarkPodAutoscalerOptions{
 					Labels: map[string]string{"foo-key": "bar-value"},
 					Spec: &v1alpha1.WatermarkPodAutoscalerSpec{

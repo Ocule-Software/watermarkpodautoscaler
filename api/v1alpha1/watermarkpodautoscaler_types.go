@@ -117,6 +117,13 @@ type ExternalMetricSource struct {
 	// +optional
 	MetricSelector *metav1.LabelSelector `json:"metricSelector,omitempty"`
 
+	// serverAddress is the address of an external gRPC server form which metrics can be fetched
+	// +optional
+	ServerAddress string `json:"serverAddress,omitempty"`
+	// serverMetadata is gRPC request metadata sent along with the request
+	// +optional
+	Metadata map[string]string `json:"metadata,omitempty"`
+
 	HighWatermark *resource.Quantity `json:"highWatermark,omitempty"`
 	LowWatermark  *resource.Quantity `json:"lowWatermark,omitempty"`
 }

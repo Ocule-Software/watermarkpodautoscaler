@@ -10,3 +10,9 @@
 ### v0.3.1
 
 * Add chart using `apiextensions.k8s.io/v1` for the CRD to support Kubernetes 1.22.
+
+## v0.4.0
+
+* Migrated to new docker image repository
+* Added support for extra arg passing to the container
+* Added support for metric and statsd customisation via values.yaml

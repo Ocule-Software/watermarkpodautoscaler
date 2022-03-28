@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         {{- include "watermarkpodautoscaler.selectorLabels" . | nindent 8 }}
+      {{- if and (.Values.metrics.prometheus.enabled) (.Values.metrics.prometheus.ddAgentScrape) }}
       annotations:
         ad.datadoghq.com/watermarkpodautoscaler.check_names: '["prometheus"]'
         ad.datadoghq.com/watermarkpodautoscaler.init_configs: '[{}]'
@@ -31,6 +32,7 @@ spec:
               }
               {{- end }}
           }]
+      {{- end }}
     spec:
     {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -48,6 +50,21 @@ spec:
           args:
             - --loglevel={{ .Values.logLevel }}
             - --leader-election-resource={{ .Values.leaderElectionResourceLock }}
+            {{- if not .Values.metrics.prometheus.enabled }}
+            - --prometheus=false
+            {{- end }}
+            {{- if .Values.metrics.statsd.enabled }}
+            - --statsd=true
+            {{- if .Values.metrics.statsd.useSocket }}
+            - --statsd-addr=unix://{{ .Values.metrics.statsd.socketPath }}/{{ .Values.metrics.statsd.socketName }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.metrics.namespace }}
+            - --metrics-namespace={{ .Values.metrics.namespace }}
+            {{- end }}
+            {{- range $arg := .Values.extraArgs }}
+            - {{ $arg }}
+            {{- end }}
           env:
             - name: WATCH_NAMESPACE
             {{- if .Values.watchAllNamespaces }}
@@ -61,19 +78,35 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            - name: OPERATOR_NAME
-              value: "watermarkpodautoscaler"
             {{- if .Values.labelsAsTags }}
             - name: DD_LABELS_AS_TAGS
               value: {{ join " " .Values.labelsAsTags | quote }}
             {{- end }}
+            {{- if and (.Values.metrics.statsd.enabled) (not .Values.metrics.statsd.useSocket) }}
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            {{- end }}
           livenessProbe:
             httpGet:
-              path: /metrics
-              port: 8383
+              path: /healthz
+              port: 9440
             initialDelaySeconds: 5
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if and (.Values.metrics.statsd.enabled) (.Values.metrics.statsd.useSocket)}}
+          volumeMounts:
+            - name: dsdsocket
+              mountPath: {{ .Values.metrics.statsd.socketPath }}
+              readOnly: true
+          {{- end }}
+      {{- if and (.Values.metrics.statsd.enabled) (.Values.metrics.statsd.useSocket)}}
+      volumes:
+        - hostPath:
+            path: {{ .Values.metrics.statsd.socketPath }}
+          name: dsdsocket
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

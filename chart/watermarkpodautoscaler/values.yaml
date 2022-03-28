@@ -4,8 +4,8 @@
 
 replicaCount: 1
 image:
-  repository: gcr.io/datadoghq/watermarkpodautoscaler
-  tag: v0.4.0
+  repository: hugohafner/watermarkpodautoscaler
+  tag: v0.4.3
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 nameOverride: ""
@@ -22,6 +22,7 @@ serviceAccount:
 rbac:
   # Specifies whether the RBAC resources should be created
   create: true
+  useExistingExternalMetricsReader: false
 # Configure the controller to watch all namespaces
 watchAllNamespaces: true
 # Labels to be included as metric tags
@@ -38,6 +39,21 @@ securityContext: {}
 # readOnlyRootFilesystem: true
 # runAsNonRoot: true
 # runAsUser: 1000
+
+extraArgs: []
+# - --metricSyncPeriodSeconds=10
+
+metrics:
+  prometheus:
+    enabled: true
+    ddAgentScrape: true
+  statsd:
+    enabled: false
+    useSocket: false # If false, mounts host ip and port
+    port: 8125
+    socketPath: /var/run/datadog/
+    socketName: dsd.socket
+  namespace: ""
 
 resources: {}
 # We usually recommend not to specify default resources and to leave this as a conscious
