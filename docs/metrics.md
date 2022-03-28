@@ -2,7 +2,7 @@
 
 * **Default Tags**
 
-`{wpa_name: string, resource_namespace: string}`
+`{wpa_name: string, wpa_namespace: string, resource_namespace: string}`
 
 * **Metrics**
 
