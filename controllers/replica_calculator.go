@@ -26,11 +26,19 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 )
 
+const (
+	aboveHighWatermarkAllowedMessage = "Allow upscaling if the value stays over the Watermark"
+	belowLowWatermarkAllowedMessage  = "Allow downscaling if the value stays under the Watermark"
+	aboveHighWatermarkReason         = "Value above High Watermark"
+	belowLowWatermarkReason          = "Value above Low Watermark"
+)
+
 // ReplicaCalculation is used to compute the scaling recommendation.
 type ReplicaCalculation struct {
-	replicaCount int32
-	utilization  int64
-	timestamp    time.Time
+	replicaCount  int32
+	utilization   int64
+	timestamp     time.Time
+	readyReplicas int32
 }
 
 // ReplicaCalculatorItf interface for ReplicaCalculator
@@ -127,7 +135,7 @@ func (c *ReplicaCalculator) GetExternalMetricReplicas(logger logr.Logger, target
 		labelsWithReason[metrics.ReasonPromLabel] = metrics.WithinBoundsPromLabelVal
 		metrics.Delete(metrics.RestrictedScaling, labelsWithReason)
 		metrics.Delete(metrics.Value, prometheus.Labels{metrics.WpaNamePromLabel: wpa.Name, metrics.MetricNamePromLabel: metricName})
-		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("unable to get external metric %s/%s/%+v: %s", wpa.Namespace, metricName, selector, metricErr)
+		return ReplicaCalculation{0, 0, time.Time{}, 0}, fmt.Errorf("unable to get external metric %s/%s/%+v: %s", wpa.Namespace, metricName, selector, err) //nolint:errorlint
 	}
 	logger.Info("Metrics from the External Metrics Provider", "metrics", metricValues)
 
@@ -139,7 +147,7 @@ func (c *ReplicaCalculator) GetExternalMetricReplicas(logger logr.Logger, target
 	// if the average algorithm is used, the metrics retrieved has to be divided by the number of available replicas.
 	adjustedUsage := float64(sum) / averaged
 	replicaCount, utilizationQuantity := getReplicaCount(logger, target.Status.Replicas, currentReadyReplicas, wpa, metricName, adjustedUsage, metric.External.LowWatermark, metric.External.HighWatermark)
-	return ReplicaCalculation{replicaCount, utilizationQuantity, timestamp}, nil
+	return ReplicaCalculation{replicaCount, utilizationQuantity, timestamp, currentReadyReplicas}, nil
 }
 
 // GetResourceReplicas calculates the desired replica count based on a target resource utilization percentage
@@ -149,7 +157,7 @@ func (c *ReplicaCalculator) GetResourceReplicas(logger logr.Logger, target *auto
 	selector := metric.Resource.MetricSelector
 	labelSelector, err := metav1.LabelSelectorAsSelector(selector)
 	if err != nil {
-		return ReplicaCalculation{0, 0, time.Time{}}, err
+		return ReplicaCalculation{0, 0, time.Time{}, 0}, err
 	}
 
 	namespace := wpa.Namespace
@@ -170,22 +178,22 @@ func (c *ReplicaCalculator) GetResourceReplicas(logger logr.Logger, target *auto
 		labelsWithReason[metrics.ReasonPromLabel] = metrics.WithinBoundsPromLabelVal
 		metrics.Delete(metrics.RestrictedScaling, labelsWithReason)
 		metrics.Delete(metrics.Value, prometheus.Labels{metrics.WpaNamePromLabel: wpa.Name, metrics.MetricNamePromLabel: string(resourceName)})
-		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("unable to get resource metric %s/%s/%+v: %s", wpa.Namespace, resourceName, selector, err)
+		return ReplicaCalculation{0, 0, time.Time{}, 0}, fmt.Errorf("unable to get resource metric %s/%s/%+v: %s", wpa.Namespace, resourceName, selector, err)
 	}
 	logger.Info("Metrics from the Resource Client", "metrics", metricValues)
 
 	lbl, err := labels.Parse(target.Status.Selector)
 	if err != nil {
-		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("could not parse the labels of the target: %v", err)
+		return ReplicaCalculation{0, 0, time.Time{}, 0}, fmt.Errorf("could not parse the labels of the target: %w", err)
 	}
 
 	podList, err := c.podLister.Pods(namespace).List(lbl)
 	if err != nil {
-		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("unable to get pods while calculating replica count: %v", err)
+		return ReplicaCalculation{0, 0, time.Time{}, 0}, fmt.Errorf("unable to get pods while calculating replica count: %w", err)
 	}
 
 	if len(podList) == 0 {
-		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("no pods returned by selector while calculating replica count")
+		return ReplicaCalculation{0, 0, time.Time{}, 0}, fmt.Errorf("no pods returned by selector while calculating replica count")
 	}
 	readiness := time.Duration(wpa.Spec.ReadinessDelaySeconds) * time.Second
 	readyPods, ignoredPods := groupPods(logger, podList, target.Name, metricValues, resourceName, readiness)
@@ -199,7 +207,7 @@ func (c *ReplicaCalculator) GetResourceReplicas(logger logr.Logger, target *auto
 
 	removeMetricsForPods(metricValues, ignoredPods)
 	if len(metricValues) == 0 {
-		return ReplicaCalculation{0, 0, time.Time{}}, fmt.Errorf("did not receive metrics for any ready pods")
+		return ReplicaCalculation{0, 0, time.Time{}, 0}, fmt.Errorf("did not receive metrics for any ready pods")
 	}
 
 	averaged := 1.0
@@ -214,7 +222,7 @@ func (c *ReplicaCalculator) GetResourceReplicas(logger logr.Logger, target *auto
 	adjustedUsage := float64(sum) / averaged
 
 	replicaCount, utilizationQuantity := getReplicaCount(logger, target.Status.Replicas, int32(readyPodCount), wpa, string(resourceName), adjustedUsage, metric.Resource.LowWatermark, metric.Resource.HighWatermark)
-	return ReplicaCalculation{replicaCount, utilizationQuantity, timestamp}, nil
+	return ReplicaCalculation{replicaCount, utilizationQuantity, timestamp, int32(readyPodCount)}, nil
 }
 
 func getReplicaCount(logger logr.Logger, currentReplicas, currentReadyReplicas int32, wpa *v1alpha1.WatermarkPodAutoscaler, name string, adjustedUsage float64, lowMark, highMark *resource.Quantity) (replicaCount int32, utilization int64) {
@@ -238,6 +246,10 @@ func getReplicaCount(logger logr.Logger, currentReplicas, currentReadyReplicas i
 			logger.Info("Recommendation is lower than current number of replicas while attempting to upscale, aborting", "replicaCount", replicaCount, "currentReadyReplicas", currentReadyReplicas)
 			replicaCount = currentReplicas
 		}
+
+		setCondition(wpa, v1alpha1.WatermarkPodAutoscalerStatusAboveHighWatermark, corev1.ConditionTrue, aboveHighWatermarkReason, aboveHighWatermarkAllowedMessage)
+		setCondition(wpa, v1alpha1.WatermarkPodAutoscalerStatusBelowLowWatermark, corev1.ConditionFalse, belowLowWatermarkReason, belowLowWatermarkAllowedMessage)
+
 	case adjustedUsage < adjustedLM:
 		replicaCount = int32(math.Floor(float64(currentReadyReplicas) * adjustedUsage / (float64(lowMark.MilliValue()))))
 		// Keep a minimum of 1 replica
@@ -247,10 +259,22 @@ func getReplicaCount(logger logr.Logger, currentReplicas, currentReadyReplicas i
 			replicaCount += *wpa.Spec.ReplicaScalingAbsoluteModulo - replicaScalingAbsoluteModuloRemainder
 		}
 		logger.Info("Value is below lowMark", "usage", utilizationQuantity.String(), "replicaCount", replicaCount, "currentReadyReplicas", currentReadyReplicas, "tolerance (%)", float64(wpa.Spec.Tolerance.MilliValue())/10, "adjustedLM", adjustedLM, "adjustedUsage", adjustedUsage)
+		if replicaCount > currentReplicas {
+			logger.Info("Recommendation is higher than current number of replicas while attempting to downscale, aborting", "replicaCount", replicaCount, "currentReadyReplicas", currentReadyReplicas)
+			replicaCount = currentReplicas
+		}
+
+		setCondition(wpa, v1alpha1.WatermarkPodAutoscalerStatusAboveHighWatermark, corev1.ConditionFalse, aboveHighWatermarkReason, aboveHighWatermarkAllowedMessage)
+		setCondition(wpa, v1alpha1.WatermarkPodAutoscalerStatusBelowLowWatermark, corev1.ConditionTrue, belowLowWatermarkReason, belowLowWatermarkAllowedMessage)
+
 	default:
 		metrics.Set(metrics.RestrictedScaling, labelsWithReason, 1)
 		metrics.Set(metrics.Value, labelsWithMetricName, adjustedUsage)
 		logger.Info("Within bounds of the watermarks", "value", utilizationQuantity.String(), "currentReadyReplicas", currentReadyReplicas, "tolerance (%)", float64(wpa.Spec.Tolerance.MilliValue())/10, "adjustedLM", adjustedLM, "adjustedHM", adjustedHM, "adjustedUsage", adjustedUsage)
+
+		setCondition(wpa, v1alpha1.WatermarkPodAutoscalerStatusAboveHighWatermark, corev1.ConditionFalse, aboveHighWatermarkReason, aboveHighWatermarkAllowedMessage)
+		setCondition(wpa, v1alpha1.WatermarkPodAutoscalerStatusBelowLowWatermark, corev1.ConditionFalse, belowLowWatermarkReason, belowLowWatermarkAllowedMessage)
+
 		// returning the currentReplicas instead of the count of healthy ones to be consistent with the upstream behavior.
 		return currentReplicas, utilizationQuantity.MilliValue()
 	}
